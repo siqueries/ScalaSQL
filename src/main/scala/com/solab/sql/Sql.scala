@@ -163,7 +163,7 @@ class Sql(val dataSource:DataSource) {
   }
 
   /** Returns a List of all the rows returned by the query. Each row is a Map with the column names as keys. */
-  def allRows(sql:String, params:Any*):List[Map[String, Any]]={
+  def rows(sql:String, params:Any*):List[Map[String, Any]]={
     var rows:List[Map[String, Any]] = Nil
     eachRow(sql, params) { m =>
       rows = rows:+m
