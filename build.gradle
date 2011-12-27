@@ -1,0 +1,13 @@
+apply plugin:'scala'
+version='0.1'
+defaultTasks 'build'
+
+repositories {
+	mavenLocal()
+	mavenCentral()
+}
+
+dependencies {
+	scalaTools 'org.scala-lang:scala-library:2.9.1', 'org.scala-lang:scala-compiler:2.9.1'
+	compile 'org.scala-lang:scala-library:2.9.1'
+}
