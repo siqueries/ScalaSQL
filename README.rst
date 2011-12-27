@@ -26,3 +26,5 @@ already direct connection support, so if that's what you're looking for, it migh
 
 I intend to use this for server-side applications, so thread safety and performance are very important
 aspects of this project.
+
+This software is released under the Apache Software License version 2.0.
