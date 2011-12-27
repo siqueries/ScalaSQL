@@ -4,7 +4,11 @@ import javax.sql.DataSource
 import java.io.{Reader, InputStream}
 import java.sql._
 
-/** Clase similar a groovy.sql.Sql pero con un DataSource por default, en vez de una conexión.
+/** A class similar to groovy.sql.Sql but with only DataSource support for the moment.
+ *
+ * The connections are thread-bound, which allows for the query and update methods to be called
+ * from the withTransaction method, which causes the same connection to be used instead of separate
+ * ones.
  *
  * @param dataSource A DataSource from which to get connections from.
  *
@@ -15,12 +19,8 @@ class Sql(val dataSource:DataSource) {
 
   val conns = new ThreadLocalConnection(dataSource)
 
-  /** Creates a PreparedStatement for the specified connection, with the specified SQL and parameters.
-   * @param conn The connection from which to create the PreparedStatement.
-   * @param sql An SQL statement.
-   * @param params the parameters for the SQL statement. */
-  def prepareStatement(conn:Connection, sql:String, params:Any*)={
-    val stmt = conn.prepareStatement(sql)
+  /** Sets the parameters of the statement, according to their type. */
+  def prepareStatement(stmt:PreparedStatement, params:Any*):PreparedStatement={
     var count=0
     params.foreach {
       count+=1
@@ -35,13 +35,23 @@ class Sql(val dataSource:DataSource) {
         case x:Timestamp => stmt.setTimestamp(count, x)
         case x:java.sql.Date => stmt.setDate(count, x)
         case x:java.util.Date => stmt.setDate(count, new java.sql.Date(x.getTime))
-        case x:Array[Byte] => stmt.setBytes(count, x)
+        case x:Double => stmt.setDouble(count, x)
+        case x:Float => stmt.setFloat(count, x)
+        case x:scala.Array[Byte] => stmt.setBytes(count, x)
         case x:Reader => stmt.setClob(count, x)
         case x:InputStream => stmt.setBlob(count, x)
         case x => stmt.setObject(count, x)
       }
     }
     stmt
+  }
+
+  /** Creates a PreparedStatement for the specified connection, with the specified SQL and parameters.
+   * @param conn The connection from which to create the PreparedStatement.
+   * @param sql An SQL statement.
+   * @param params the parameters for the SQL statement. */
+  def prepareStatement(conn:Connection, sql:String, params:Any*):PreparedStatement={
+    prepareStatement(conn.prepareStatement(sql), params)
   }
 
   /** Creates a PreparedStatement from the specified connection, with the specified SQL and parameters,
@@ -49,32 +59,12 @@ class Sql(val dataSource:DataSource) {
    * @param conn The connection from which to create the PreparedStatement.
    * @param sql An insert statement.
    * @param params The parameters for the insert statement. */
-  def prepareInsertStatement(conn:Connection, sql:String, params:Any*)={
+  def prepareInsertStatement(conn:Connection, sql:String, params:Any*):PreparedStatement={
     val stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
-    var count=0
-    params.foreach {
-      count+=1
-      _ match {
-        case x:Int => stmt.setInt(count, x)
-        case x:Long => stmt.setLong(count, x)
-        case x:Short => stmt.setShort(count, x)
-        case x:Byte => stmt.setByte(count, x)
-        case x:Boolean => stmt.setBoolean(count, x)
-        case x:BigDecimal => stmt.setBigDecimal(count, x.bigDecimal)
-        case x:String => stmt.setString(count, x)
-        case x:Timestamp => stmt.setTimestamp(count, x)
-        case x:java.sql.Date => stmt.setDate(count, x)
-        case x:java.util.Date => stmt.setDate(count, new java.sql.Date(x.getTime))
-        case x:Array[Byte] => stmt.setBytes(count, x)
-        case x:Reader => stmt.setClob(count, x)
-        case x:InputStream => stmt.setBlob(count, x)
-        case x => stmt.setObject(count, x)
-      }
-    }
-    stmt
+    prepareStatement(stmt, params)
   }
 
-  /** Ejecuta una sentencia SQL parametrizada, con una conexión del DataSource. */
+  /** Executes a parameterized SQL statement, using a connection from the DataSource. */
   def execute(sql:String, params:Any*):Boolean={
     val conn = conns.get()
     var rval=false
@@ -183,9 +173,110 @@ class Sql(val dataSource:DataSource) {
           if (rs.next()) {
             val meta = rs.getMetaData
             Some((1 to meta.getColumnCount).map { mapColumn(rs, meta, _) }.toMap)
-          } else {
-            None
-          }
+          } else None
+        } finally rs.close()
+      } finally stmt.close()
+    } finally conn.close()
+  }
+
+  /** Returns the first value of the first row of the query, as an optional Int. */
+  def queryForInt(sql:String, params:Any*):Option[Int]={
+    val conn = conns.get()
+    try {
+      val stmt = prepareStatement(conn.connection(), sql, params)
+      stmt.setMaxRows(1)
+      try {
+        val rs = stmt.executeQuery()
+        try {
+          if (rs.next()) {
+            val v = rs.getInt(1)
+            if (rs.wasNull()) None else Some(v)
+          } else None
+        } finally rs.close()
+      } finally stmt.close()
+    } finally conn.close()
+  }
+  /** Returns the first value of the first row of the query, as an optional Long. */
+  def queryForLong(sql:String, params:Any*):Option[Long]={
+    val conn = conns.get()
+    try {
+      val stmt = prepareStatement(conn.connection(), sql, params)
+      stmt.setMaxRows(1)
+      try {
+        val rs = stmt.executeQuery()
+        try {
+          if (rs.next()) {
+            val v = rs.getLong(1)
+            if (rs.wasNull()) None else Some(v)
+          } else None
+        } finally rs.close()
+      } finally stmt.close()
+    } finally conn.close()
+  }
+  /** Returns the first value of the first row of the query, as an optional BigDecimal. */
+  def queryForDecimal(sql:String, params:Any*):Option[BigDecimal]={
+    val conn = conns.get()
+    try {
+      val stmt = prepareStatement(conn.connection(), sql, params)
+      stmt.setMaxRows(1)
+      try {
+        val rs = stmt.executeQuery()
+        try {
+          if (rs.next()) {
+            val v = rs.getBigDecimal(1)
+            if (rs.wasNull()) None else Some(BigDecimal(v))
+          } else None
+        } finally rs.close()
+      } finally stmt.close()
+    } finally conn.close()
+  }
+  /** Returns the first value of the first row of the query, as an optional String. */
+  def queryForString(sql:String, params:Any*):Option[String]={
+    val conn = conns.get()
+    try {
+      val stmt = prepareStatement(conn.connection(), sql, params)
+      stmt.setMaxRows(1)
+      try {
+        val rs = stmt.executeQuery()
+        try {
+          if (rs.next()) {
+            val v = rs.getString(1)
+            if (rs.wasNull()) None else Some(v)
+          } else None
+        } finally rs.close()
+      } finally stmt.close()
+    } finally conn.close()
+  }
+  /** Returns the first value of the first row of the query, as an optional Boolean. */
+  def queryForBoolean(sql:String, params:Any*):Option[Boolean]={
+    val conn = conns.get()
+    try {
+      val stmt = prepareStatement(conn.connection(), sql, params)
+      stmt.setMaxRows(1)
+      try {
+        val rs = stmt.executeQuery()
+        try {
+          if (rs.next()) {
+            val v = rs.getBoolean(1)
+            if (rs.wasNull()) None else Some(v)
+          } else None
+        } finally rs.close()
+      } finally stmt.close()
+    } finally conn.close()
+  }
+  /** Returns the first value of the first row of the query, as an optional value of the specified type. */
+  def queryForValue[T](sql:String, params:Any*):Option[T]={
+    val conn = conns.get()
+    try {
+      val stmt = prepareStatement(conn.connection(), sql, params)
+      stmt.setMaxRows(1)
+      try {
+        val rs = stmt.executeQuery()
+        try {
+          if (rs.next()) {
+            val v = rs.getObject(1).asInstanceOf[T]
+            if (rs.wasNull()) None else Some(v)
+          } else None
         } finally rs.close()
       } finally stmt.close()
     } finally conn.close()
