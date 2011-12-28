@@ -328,14 +328,14 @@ class Sql(val dataSource:DataSource) {
     }
   }
 
-  /** Creates and returns a Tuple2 with the specified column's name and its value. If the value is null, the returned
+  /** Creates and returns a Tuple2 with the specified column's lowercase name and its value. If the value is null, the returned
    * value is None.
    * @param rs An open ResultSet
    * @param meta The ResultSet's metadata
    * @param idx The column index (starting at 1). */
   def mapColumn(rs:ResultSet, meta:ResultSetMetaData, idx:Int):(String, Any)={
     val v = rs.getObject(idx)
-    (meta.getColumnName(idx) -> (if (rs.wasNull()) None else v))
+    (meta.getColumnName(idx).toLowerCase -> (if (rs.wasNull()) None else v))
   }
 
 }
