@@ -21,7 +21,6 @@ class TestSql extends SpecificationWithJUnit { def is =
   "Delete no rows"                        ! deleteNothing             ^
   "Delete a row"                          ! deleteOneRow              ^
   "Delete several rows"                   ! deleteManyRows            ^
-                                            Step(insertTestRows())     ^
   "Query first row"                       ! queryFirstRow             ^
   "Query boolean"                         ! queryBoolean              ^
   "Query decimal"                         ! queryDecimal              ^
@@ -29,17 +28,20 @@ class TestSql extends SpecificationWithJUnit { def is =
   "Query Long"                            ! queryLong                 ^
   "Query String"                          ! queryString               ^
   "Query other value"                     ! queryValue                ^
-  "Query several rows"                    ! success ^
+  "Query several rows"                    ! queryRows                 ^
   "Query limited rows"                    ! pending ^
-  "Query raw rows"                        ! success ^
+  "Query raw rows"                        ! rawQuery                  ^
   "Transaction with rollback"             ! success ^
   "Transaction with commit"               ! success ^
                                           Step(shutdown()) ^
                                           end
 
   var ds:BasicDataSource=_
-  var testRowKey1:Long=0
-  var testRowKey2:Long=0
+  lazy val testRowKey1=insertRow(refdate1)
+  lazy val testRowKey2=insertRow(refdate1)
+  val refdate1=2168856789L
+  val refdate2=1325089720000L
+  val refdate3=2168867000L
   lazy val sql = new Sql(ds)
 
   def insertSimpleRow()={
@@ -47,77 +49,103 @@ class TestSql extends SpecificationWithJUnit { def is =
   }
   def insertRowWithGeneratedKey()={
     val keys = sql.executeInsert("INSERT INTO scala_sql_test1 (string, date, tstamp, colint,coldec) VALUES (?, ?, ?, ?, ?)",
-      "test2", new Date, new Timestamp(1325089723956L), 2, BigDecimal(3))
+      "test2", new Date, new Timestamp(refdate2), 2, BigDecimal(3))
     (keys.size must be equalTo(1)) and (keys(0).size must be equalTo(1)) and (keys(0)(0).asInstanceOf[Long] must be greaterThan(0))
   }
   def updateExistingRow()={
     val keys = sql.executeInsert("INSERT INTO scala_sql_test1 (string, date, tstamp, colint,coldec) VALUES (?, ?, ?, ?, ?)",
-      "test3", new Date, new Timestamp(1325089723956L), 3, BigDecimal(4))
+      "test3", new Date, new Timestamp(refdate2), 3, BigDecimal(4))
     val count = sql.executeUpdate("UPDATE scala_sql_test1 SET colbit=true WHERE pkey=?", keys(0)(0))
     val flag = sql.queryForBoolean("SELECT colbit FROM scala_sql_test1 WHERE pkey=?", keys(0)(0))
     (count must be equalTo(1)) and (flag must beSome[Boolean]) and (flag.get must beTrue)
   }
   def updateNothing()={
-    sql.executeUpdate("UPDATE scala_sql_test1 SET colbit=true WHERE pkey=?", -1000) must be equalTo(0)
+    sql.executeUpdate("UPDATE scala_sql_test1 SET colbit=true WHERE pkey=-1000") must be equalTo(0)
   }
   def deleteNothing()={
-    sql.executeUpdate("DELETE FROM scala_sql_test1 WHERE pkey=?", -1000) must be equalTo(0)
+    sql.executeUpdate("DELETE FROM scala_sql_test1 WHERE pkey=-1000") must be equalTo(0)
   }
   def deleteOneRow()={
     val keys = sql.executeInsert("INSERT INTO scala_sql_test1 (string, date, tstamp, colint,coldec) VALUES (?, ?, ?, ?, ?)",
-      "test3", new Date, new Timestamp(1325089723956L), 3, BigDecimal(4))
+      "test3", new Date, new Timestamp(refdate2), 3, BigDecimal(4))
     sql.executeUpdate("DELETE FROM scala_sql_test1 WHERE pkey=?", keys(0)(0)) must be equalTo(1)
   }
   def deleteManyRows()={
-    sql.executeInsert("INSERT INTO scala_sql_test1 (string, date, tstamp, colint,coldec) VALUES (?, ?, ?, ?, ?)",
-      "test4", new Date, new Timestamp(2168867890L), 4, BigDecimal(5))
-    sql.executeInsert("INSERT INTO scala_sql_test1 (string, date, tstamp, colint,coldec) VALUES (?, ?, ?, ?, ?)",
-      "test5", new Date, new Timestamp(2168867890L), 5, BigDecimal(6))
-    sql.executeInsert("INSERT INTO scala_sql_test1 (string, date, tstamp, colint,coldec) VALUES (?, ?, ?, ?, ?)",
-      "test6", new Date, new Timestamp(2168867890L), 6, BigDecimal(7))
-    sql.executeUpdate("DELETE FROM scala_sql_test1 WHERE tstamp=?", new Timestamp(2168867890L)) must be equalTo(3)
+    4 to 6 foreach { i =>
+      sql.executeInsert("INSERT INTO scala_sql_test1 (string, date, tstamp, colint,coldec) VALUES (?, ?, ?, ?, ?)",
+        "test" + i, new Date, new Timestamp(refdate3), i, BigDecimal(i+1))
+    }
+    sql.executeUpdate("DELETE FROM scala_sql_test1 WHERE tstamp=?", new Timestamp(refdate3)) must be equalTo(3)
   }
   def queryFirstRow()={
     val existing = sql.firstRow("SELECT * FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    val absent   = sql.firstRow("SELECT * FROM scala_sql_test1 WHERE pkey=?", -5000)
-    println("la tupla encontrada fue ", existing)
+    val absent   = sql.firstRow("SELECT * FROM scala_sql_test1 WHERE pkey=-5000")
     (absent must beNone) and (existing must beSome[Map[String, Any]]) and (existing.get("pkey") must be equalTo(testRowKey1))
   }
   def queryBoolean()={
-    val v1 = sql.queryForBoolean("SELECT colbit FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    sql.executeUpdate("UPDATE scala_sql_test1 SET colbit=NULL WHERE pkey=?", testRowKey1)
-    val v2 = sql.queryForBoolean("SELECT colbit FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    (v1 must beSome[Boolean]) and (v1.get must beFalse) and (v2 must beNone)
+    val k = insertRow(refdate2)
+    val v1 = sql.queryForBoolean("SELECT colbit FROM scala_sql_test1 WHERE pkey=?", k)
+    sql.executeUpdate("UPDATE scala_sql_test1 SET colbit=NULL WHERE pkey=?", k)
+    val v2 = sql.queryForBoolean("SELECT colbit FROM scala_sql_test1 WHERE pkey=?", k)
+    val v3 = sql.queryForBoolean("SELECT colbit FROM scala_sql_test1 WHERE pkey=-5000")
+    (v1 must beSome[Boolean]) and (v1.get must beFalse) and (v2 must beNone) and (v3 must beNone)
   }
   def queryDecimal()={
-    val v1 = sql.queryForDecimal("SELECT coldec FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    sql.executeUpdate("UPDATE scala_sql_test1 SET coldec=NULL WHERE pkey=?", testRowKey1)
-    val v2 = sql.queryForDecimal("SELECT coldec FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    (v1 must beSome[BigDecimal]) and (v1.get must be equalTo(BigDecimal(200))) and (v2 must beNone)
+    val k = insertRow(refdate2)
+    val v1 = sql.queryForDecimal("SELECT coldec FROM scala_sql_test1 WHERE pkey=?", k)
+    sql.executeUpdate("UPDATE scala_sql_test1 SET coldec=NULL WHERE pkey=?", k)
+    val v2 = sql.queryForDecimal("SELECT coldec FROM scala_sql_test1 WHERE pkey=?", k)
+    (v1 must beSome[BigDecimal]) and (v1.get must be equalTo(BigDecimal(345))) and (v2 must beNone)
   }
   def queryInt()={
-    val v1 = sql.queryForInt("SELECT colint FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    sql.executeUpdate("UPDATE scala_sql_test1 SET colint=NULL WHERE pkey=?", testRowKey1)
-    val v2 = sql.queryForInt("SELECT colint FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    (v1 must beSome[Int]) and (v1.get must be equalTo(100)) and (v2 must beNone)
+    val k = insertRow(refdate2)
+    val v1 = sql.queryForInt("SELECT colint FROM scala_sql_test1 WHERE pkey=?", k)
+    sql.executeUpdate("UPDATE scala_sql_test1 SET colint=NULL WHERE pkey=?", k)
+    val v2 = sql.queryForInt("SELECT colint FROM scala_sql_test1 WHERE pkey=?", k)
+    (v1 must beSome[Int]) and (v1.get must be equalTo(234)) and (v2 must beNone)
   }
   def queryLong()={
-    val v1 = sql.queryForLong("SELECT colint FROM scala_sql_test1 WHERE pkey=?", testRowKey2)
-    sql.executeUpdate("UPDATE scala_sql_test1 SET colint=NULL WHERE pkey=?", testRowKey2)
-    val v2 = sql.queryForLong("SELECT colint FROM scala_sql_test1 WHERE pkey=?", testRowKey2)
-    (v1 must beSome[Long]) and (v1.get must be equalTo(100L)) and (v2 must beNone)
+    val k = insertRow(refdate2)
+    val v1 = sql.queryForLong("SELECT colint FROM scala_sql_test1 WHERE pkey=?", k)
+    sql.executeUpdate("UPDATE scala_sql_test1 SET colint=NULL WHERE pkey=?", k)
+    val v2 = sql.queryForLong("SELECT colint FROM scala_sql_test1 WHERE pkey=?", k)
+    (v1 must beSome[Long]) and (v1.get must be equalTo(234L)) and (v2 must beNone)
   }
   def queryString()={
-    val v1 = sql.queryForString("SELECT string FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    sql.executeUpdate("UPDATE scala_sql_test1 SET string=NULL WHERE pkey=?", testRowKey1)
-    val v2 = sql.queryForString("SELECT string FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
+    val k = insertRow(refdate2)
+    val v1 = sql.queryForString("SELECT string FROM scala_sql_test1 WHERE pkey=?", k)
+    sql.executeUpdate("UPDATE scala_sql_test1 SET string=NULL WHERE pkey=?", k)
+    val v2 = sql.queryForString("SELECT string FROM scala_sql_test1 WHERE pkey=?", k)
     (v1 must beSome[String]) and (v1.get must be equalTo("test_row")) and (v2 must beNone)
   }
   def queryValue()={
-    val v1 = sql.queryForValue[Timestamp]("SELECT tstamp FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    sql.executeUpdate("UPDATE scala_sql_test1 SET tstamp=NULL WHERE pkey=?", testRowKey1)
-    val v2 = sql.queryForValue[Timestamp]("SELECT tstamp FROM scala_sql_test1 WHERE pkey=?", testRowKey1)
-    (v1 must beSome[Timestamp]) and (v1.get.getTime must be equalTo(2168856789L)) and (v2 must beNone)
+    val k = insertRow(refdate2)
+    val v1 = sql.queryForValue[Timestamp]("SELECT tstamp FROM scala_sql_test1 WHERE pkey=?", k)
+    sql.executeUpdate("UPDATE scala_sql_test1 SET tstamp=NULL WHERE pkey=?", k)
+    val v2 = sql.queryForValue[Timestamp]("SELECT tstamp FROM scala_sql_test1 WHERE pkey=-5000")
+    val v3 = sql.queryForValue[Timestamp]("SELECT tstamp FROM scala_sql_test1 WHERE pkey=?", k)
+    (v1 must beSome[Timestamp]) and (v1.get.getTime must be equalTo(refdate2)) and (v2 must beNone) and (v3 must beNone)
+  }
+  def queryRows()={
+    val rows1 = sql.rows("SELECT * FROM scala_sql_test1")
+    println("rows1:", rows1)
+    val rows2 = sql.rows("SELECT pkey, string, date, tstamp, colbit FROM scala_sql_test1 WHERE tstamp=?", new Timestamp(refdate1))
+    println("rows2:", rows2)
+    (rows1.size must be greaterThanOrEqualTo(rows2.size)) and (rows2.size must be greaterThanOrEqualTo(2)) and
+    (rows2.exists( r => r("pkey") == testRowKey1 ) must beTrue) and (rows2.exists( r => r("pkey") == testRowKey2 ) must beTrue)
+  }
+  def rawQuery()={
+    var (k1found, k2found, k3found, k4found) = (false,false, false, false)
+    sql.eachRow("SELECT * FROM scala_sql_test1 WHERE tstamp=?", new Timestamp(refdate1)) { row =>
+      k1found |= row("pkey") == testRowKey1
+      k2found |= row("pkey") == testRowKey2
+    }
+    sql.eachRawRow("SELECT pkey FROM scala_sql_test1") { rs =>
+      k3found |= rs.getLong(1) == testRowKey1
+      k4found |= rs.getLong(1) == testRowKey2
+    }
+    println("rows", k1found, k2found, "raw",k3found, k4found)
+    k1found must beTrue and (k2found must beTrue) and (k3found must beTrue) and (k4found must beTrue)
   }
 
   def setup() {
@@ -148,18 +176,13 @@ class TestSql extends SpecificationWithJUnit { def is =
       string VARCHAR(200),
       colint INTEGER NOT NULL
     )""")
+    println("test keys",testRowKey1,testRowKey2)
   }
 
-  def insertTestRows() {
-    val when = 2168856789L
-    val k1 = sql.executeInsert("INSERT INTO scala_sql_test1(string, date, time, tstamp, colint, coldec, colbit) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      "test_row", new Date(when), new Time(when), new Timestamp(when), 100, BigDecimal(200), false)
-    val k2 = sql.executeInsert("INSERT INTO scala_sql_test1(string, date, time, tstamp, colint, coldec, colbit) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      "test_row", new Date(when), new Time(when), new Timestamp(when), 100, BigDecimal(200), false)
-    testRowKey1 = k1(0)(0).asInstanceOf[Long]
-    testRowKey2 = k2(0)(0).asInstanceOf[Long]
+  def insertRow(ts:Long):Long={
+    sql.executeInsert("INSERT INTO scala_sql_test1(string, date, time, tstamp, colint, coldec, colbit) VALUES('test_row', ?, ?, ?, 234, 345.00, false)",
+      new Date(ts), new Time(ts), new Timestamp(ts))(0)(0).asInstanceOf[Long]
   }
-
   def shutdown() {
     ds.close()
   }
