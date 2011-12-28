@@ -31,8 +31,8 @@ class TestSql extends SpecificationWithJUnit { def is =
   "Query several rows"                    ! queryRows                 ^
   "Query limited rows"                    ! pending ^
   "Query raw rows"                        ! rawQuery                  ^
-  "Transaction with rollback"             ! success ^
-  "Transaction with commit"               ! success ^
+  "Transaction with rollback"             ! txRollback                ^
+  "Transaction with commit"               ! txCommit                  ^
                                           Step(shutdown()) ^
                                           end
 
@@ -42,6 +42,8 @@ class TestSql extends SpecificationWithJUnit { def is =
   val refdate1=2168856789L
   val refdate2=1325089720000L
   val refdate3=2168867000L
+  val refdate4=2160000000L
+  val refdate5=2161234560L
   lazy val sql = new Sql(ds)
 
   def insertSimpleRow()={
@@ -128,9 +130,7 @@ class TestSql extends SpecificationWithJUnit { def is =
   }
   def queryRows()={
     val rows1 = sql.rows("SELECT * FROM scala_sql_test1")
-    println("rows1:", rows1)
     val rows2 = sql.rows("SELECT pkey, string, date, tstamp, colbit FROM scala_sql_test1 WHERE tstamp=?", new Timestamp(refdate1))
-    println("rows2:", rows2)
     (rows1.size must be greaterThanOrEqualTo(rows2.size)) and (rows2.size must be greaterThanOrEqualTo(2)) and
     (rows2.exists( r => r("pkey") == testRowKey1 ) must beTrue) and (rows2.exists( r => r("pkey") == testRowKey2 ) must beTrue)
   }
@@ -144,10 +144,26 @@ class TestSql extends SpecificationWithJUnit { def is =
       k3found |= rs.getLong(1) == testRowKey1
       k4found |= rs.getLong(1) == testRowKey2
     }
-    println("rows", k1found, k2found, "raw",k3found, k4found)
     k1found must beTrue and (k2found must beTrue) and (k3found must beTrue) and (k4found must beTrue)
   }
 
+  def txRollback()={
+    sql.withTransaction { conn =>
+      insertRow(refdate4)
+      insertRow(refdate4)
+      insertRow(refdate4)
+      sql.executeUpdate("UPDATE nonexisting_table SET bogus_field=5")
+    } must throwAn[Exception] and
+    (sql.queryForInt("SELECT count(*) FROM scala_sql_test1 WHERE tstamp=?", new Timestamp(refdate4)) must be equalTo(Some(0)))
+  }
+  def txCommit()={
+    sql.withTransaction { conn =>
+      insertRow(refdate5)
+      insertRow(refdate5)
+      insertRow(refdate5)
+    }
+    sql.queryForInt("SELECT count(*) FROM scala_sql_test1 WHERE tstamp=?", new Timestamp(refdate5)) must be equalTo(Some(3))
+  }
   def setup() {
     //Create a pooled datasource for a test database
     ds = new BasicDataSource
@@ -176,7 +192,8 @@ class TestSql extends SpecificationWithJUnit { def is =
       string VARCHAR(200),
       colint INTEGER NOT NULL
     )""")
-    println("test keys",testRowKey1,testRowKey2)
+    //This is just to create the rows
+    require(testRowKey1 < testRowKey2)
   }
 
   def insertRow(ts:Long):Long={
