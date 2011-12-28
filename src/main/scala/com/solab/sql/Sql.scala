@@ -36,10 +36,9 @@ class Sql(val dataSource:DataSource) {
 
   /** Sets the parameters of the statement, according to their type. */
   def prepareStatement(stmt:PreparedStatement, params:Any*):PreparedStatement={
-    var count=0
-    params.foreach {
-      count+=1
-      _ match {
+    var count=1
+    params.foreach { p =>
+      p match {
         case x:Int => stmt.setInt(count, x)
         case x:Long => stmt.setLong(count, x)
         case x:Short => stmt.setShort(count, x)
@@ -57,6 +56,7 @@ class Sql(val dataSource:DataSource) {
         case x:InputStream => stmt.setBlob(count, x)
         case x => stmt.setObject(count, x)
       }
+      count+=1
     }
     stmt
   }
@@ -66,7 +66,7 @@ class Sql(val dataSource:DataSource) {
    * @param sql An SQL statement.
    * @param params the parameters for the SQL statement. */
   def prepareStatement(conn:Connection, sql:String, params:Any*):PreparedStatement={
-    prepareStatement(conn.prepareStatement(sql), params)
+    prepareStatement(conn.prepareStatement(sql), params:_*)
   }
 
   /** Creates a PreparedStatement from the specified connection, with the specified SQL and parameters,
@@ -76,7 +76,7 @@ class Sql(val dataSource:DataSource) {
    * @param params The parameters for the insert statement. */
   def prepareInsertStatement(conn:Connection, sql:String, params:Any*):PreparedStatement={
     val stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
-    prepareStatement(stmt, params)
+    prepareStatement(stmt, params:_*)
   }
 
   /** Executes a parameterized SQL statement, using a connection from the DataSource. */
@@ -84,7 +84,7 @@ class Sql(val dataSource:DataSource) {
     val conn = conns.get()
     var rval=false
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       try {
         rval=stmt.execute()
       } finally stmt.close()
@@ -112,7 +112,7 @@ class Sql(val dataSource:DataSource) {
     val conn = conns.get()
     var rval= -1
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       try {
         rval=stmt.executeUpdate()
       } finally stmt.close()
@@ -128,7 +128,7 @@ class Sql(val dataSource:DataSource) {
   def executeInsert(sql:String, params:Any*):IndexedSeq[IndexedSeq[Any]]={
     val conn = conns.get()
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       try {
         val count = 1 to stmt.executeUpdate()
         val rs = stmt.getGeneratedKeys
@@ -151,7 +151,7 @@ class Sql(val dataSource:DataSource) {
   def eachRawRow(sql:String, params:Any*)(body: ResultSet => Unit) {
     val conn = conns.get()
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       try {
         val rs = stmt.executeQuery()
         try {
@@ -169,7 +169,7 @@ class Sql(val dataSource:DataSource) {
    * @param body A function to be called for each row, taking a Map[String,Any] as parameter.
    */
   def eachRow(sql:String, params:Any*)(body: Map[String,Any] => Unit) {
-    eachRawRow(sql, params) { rs:ResultSet =>
+    eachRawRow(sql, params:_*) { rs:ResultSet =>
       val meta = rs.getMetaData
       val range = 1 to meta.getColumnCount
       while (rs.next()) {
@@ -182,7 +182,7 @@ class Sql(val dataSource:DataSource) {
   /** Returns a List of all the rows returned by the query. Each row is a Map with the column names as keys. */
   def rows(sql:String, params:Any*):List[Map[String, Any]]={
     var rows:List[Map[String, Any]] = Nil
-    eachRow(sql, params) { m =>
+    eachRow(sql, params:_*) { m =>
       rows = rows:+m
     }
     rows
@@ -192,7 +192,7 @@ class Sql(val dataSource:DataSource) {
   def firstRow(sql:String, params:Any*):Option[Map[String, Any]]={
     val conn = conns.get()
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       stmt.setMaxRows(1)
       try {
         val rs = stmt.executeQuery()
@@ -210,7 +210,7 @@ class Sql(val dataSource:DataSource) {
   def queryForInt(sql:String, params:Any*):Option[Int]={
     val conn = conns.get()
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       stmt.setMaxRows(1)
       try {
         val rs = stmt.executeQuery()
@@ -227,7 +227,7 @@ class Sql(val dataSource:DataSource) {
   def queryForLong(sql:String, params:Any*):Option[Long]={
     val conn = conns.get()
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       stmt.setMaxRows(1)
       try {
         val rs = stmt.executeQuery()
@@ -244,7 +244,7 @@ class Sql(val dataSource:DataSource) {
   def queryForDecimal(sql:String, params:Any*):Option[BigDecimal]={
     val conn = conns.get()
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       stmt.setMaxRows(1)
       try {
         val rs = stmt.executeQuery()
@@ -261,7 +261,7 @@ class Sql(val dataSource:DataSource) {
   def queryForString(sql:String, params:Any*):Option[String]={
     val conn = conns.get()
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       stmt.setMaxRows(1)
       try {
         val rs = stmt.executeQuery()
@@ -278,7 +278,7 @@ class Sql(val dataSource:DataSource) {
   def queryForBoolean(sql:String, params:Any*):Option[Boolean]={
     val conn = conns.get()
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       stmt.setMaxRows(1)
       try {
         val rs = stmt.executeQuery()
@@ -295,7 +295,7 @@ class Sql(val dataSource:DataSource) {
   def queryForValue[T](sql:String, params:Any*):Option[T]={
     val conn = conns.get()
     try {
-      val stmt = prepareStatement(conn.connection(), sql, params)
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
       stmt.setMaxRows(1)
       try {
         val rs = stmt.executeQuery()
