@@ -91,6 +91,18 @@ class Sql(val dataSource:DataSource) {
     } finally conn.close()
     rval
   }
+  /** Executes a simple SQL statement, using a connection from the DataSource. */
+  def execute(sql:String):Boolean={
+    val conn = conns.get()
+    var rval=false
+    try {
+      val stmt = conn.connection().createStatement()
+      try {
+        rval=stmt.execute(sql)
+      } finally stmt.close()
+    } finally conn.close()
+    rval
+  }
 
   /** Executes the specified SQL as an update statement
    * @param sql The statement to execute
