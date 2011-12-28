@@ -147,7 +147,8 @@ class Sql(val dataSource:DataSource) {
    * does not need to call next).
    * @param sql The query to run.
    * @param params The parameters to pass to the query.
-   * @param body The function to call for each row. It is passed the ResultSet. */
+   * @param body The function to call for each row. It is passed the ResultSet but it doesn't need to call next() on it
+   * since this is done inside this method. */
   def eachRawRow(sql:String, params:Any*)(body: ResultSet => Unit) {
     val conn = conns.get()
     try {
@@ -170,14 +171,21 @@ class Sql(val dataSource:DataSource) {
    * will be the column names, in lowercase.
    */
   def eachRow(sql:String, params:Any*)(body: Map[String,Any] => Unit) {
-    eachRawRow(sql, params:_*) { rs:ResultSet =>
-      val meta = rs.getMetaData
-      val range = 1 to meta.getColumnCount
-      while (rs.next()) {
-        val row = range.map { mapColumn(rs, meta, _) }.toMap
-        body(row)
-      }
-    }
+    val conn = conns.get()
+    try {
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
+      try {
+        val rs = stmt.executeQuery()
+        try {
+          val meta = rs.getMetaData
+          val range = 1 to meta.getColumnCount
+          while (rs.next()) {
+            val row = range.map { mapColumn(rs, meta, _) }.toMap
+            body(row)
+          }
+        } finally rs.close()
+      } finally stmt.close()
+    } finally conn.close()
   }
 
   /** Returns a List of all the rows returned by the query. Each row is a Map with the column names as keys, in lowercase. */
