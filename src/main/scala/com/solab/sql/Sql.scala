@@ -166,7 +166,8 @@ class Sql(val dataSource:DataSource) {
   /** Runs a parameterized query and calls a function with each row, passing the row as a Map.
    * @param sql The query to run.
    * @param params The parameters to pass to the query.
-   * @param body A function to be called for each row, taking a Map[String,Any] as parameter.
+   * @param body A function to be called for each row, taking a Map[String,Any] as parameter. The keys
+   * will be the column names, in lowercase.
    */
   def eachRow(sql:String, params:Any*)(body: Map[String,Any] => Unit) {
     eachRawRow(sql, params:_*) { rs:ResultSet =>
@@ -179,7 +180,7 @@ class Sql(val dataSource:DataSource) {
     }
   }
 
-  /** Returns a List of all the rows returned by the query. Each row is a Map with the column names as keys. */
+  /** Returns a List of all the rows returned by the query. Each row is a Map with the column names as keys, in lowercase. */
   def rows(sql:String, params:Any*):List[Map[String, Any]]={
     var rows:List[Map[String, Any]] = Nil
     eachRow(sql, params:_*) { m =>
@@ -188,7 +189,10 @@ class Sql(val dataSource:DataSource) {
     rows
   }
 
-  /** Returns the first row, if any, for the specified query. */
+  /** Returns the first row, if any, for the specified query.
+   * @param sql The query string.
+   * @param params The parameters for the query.
+   * @return A Option[Map] representing the row if one was found, with the column names as keys, in all-lowercase. */
   def firstRow(sql:String, params:Any*):Option[Map[String, Any]]={
     val conn = conns.get()
     try {
