@@ -13,7 +13,7 @@ import org.specs2.specification.Step
 class TestSql extends SpecificationWithJUnit { def is =
 
   "Test all the methods in Sql component" ^ Step(setup()) ^
-  "Insert a simple row" ! success ^
+  "Insert a simple row" ! insertSimpleRow ^
   "Insert a row and get generated key" ! success ^
   "Update existing row" ! success ^
   "Update no rows" ! success ^
@@ -34,6 +34,9 @@ class TestSql extends SpecificationWithJUnit { def is =
   Step(shutdown()) ^
   end
 
+  def insertSimpleRow={
+    success
+  }
   def setup() {
     if (Aux.sql == null) {
       val ds = new BasicDataSource
@@ -46,6 +49,24 @@ class TestSql extends SpecificationWithJUnit { def is =
       ds.setInitialSize(Runtime.getRuntime.availableProcessors)
       Aux.ds=ds
       Aux.sql=new Sql(ds)
+      //Now create some tables
+      Aux.sql.execute("""
+      CREATE TABLE scala_sql_test1(
+        pkey SERIAL PRIMARY KEY,
+        string VARCHAR(40),
+        date   DATE,
+        time   TIME,
+        tstamp TIMESTAMP,
+        colint INTEGER,
+        coldec NUMERIC(12,4),
+        colbit BOOLEAN
+      )""")
+      Aux.sql.execute("""
+      CREATE TABLE scala_sql_test2(
+        pkey INTEGER PRIMARY KEY,
+        string VARCHAR(200),
+        colint INTEGER NOT NULL
+      )""")
     }
   }
 
