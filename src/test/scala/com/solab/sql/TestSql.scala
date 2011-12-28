@@ -12,7 +12,7 @@ import org.specs2.specification.Step
  */
 class TestSql extends SpecificationWithJUnit { def is =
 
-  "Test all the methods in Sql component" ^ Step(setup) ^
+  "Test all the methods in Sql component" ^ Step(setup()) ^
   "Insert a simple row" ! success ^
   "Insert a row and get generated key" ! success ^
   "Update existing row" ! success ^
@@ -31,7 +31,7 @@ class TestSql extends SpecificationWithJUnit { def is =
   "Query raw rows" ! success ^
   "Transaction with rollback" ! success ^
   "Transaction with commit" ! success ^
-  Step(shutdown) ^
+  Step(shutdown()) ^
   end
 
   def setup() {
