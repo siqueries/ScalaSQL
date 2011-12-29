@@ -29,11 +29,11 @@ class TestSql extends SpecificationWithJUnit { def is =
   "Query String"                          ! queryString               ^
   "Query other value"                     ! queryValue                ^
   "Query several rows"                    ! queryRows                 ^
-  "Query limited rows"                    ! pending ^
+  "Query limited rows"                    ! limitedQueries            ^
   "Query raw rows"                        ! rawQuery                  ^
   "Transaction with rollback"             ! txRollback                ^
   "Transaction with commit"               ! txCommit                  ^
-                                          Step(shutdown()) ^
+                                          Step(shutdown())            ^
                                           end
 
   var ds:BasicDataSource=_
@@ -147,6 +147,12 @@ class TestSql extends SpecificationWithJUnit { def is =
     k1found must beTrue and (k2found must beTrue) and (k3found must beTrue) and (k4found must beTrue)
   }
 
+  def limitedQueries()={
+    val q1 = sql.rows(2,0,"SELECT * FROM scala_sql_test1 ORDER BY pkey")
+    val q2 = sql.rows(1,1,"SELECT * FROM scala_sql_test1 ORDER BY pkey")
+    val q3 = sql.rows(5,10000,"SELECT * FROM scala_sql_test1 ORDER BY pkey")
+    q1.size must be equalTo(2) and (q2.size must be equalTo(1)) and (q1(1) must be equalTo(q2.head)) and (q3 must beEmpty)
+  }
   def txRollback()={
     sql.withTransaction { conn =>
       insertRow(refdate4)
@@ -164,6 +170,7 @@ class TestSql extends SpecificationWithJUnit { def is =
     }
     sql.queryForInt("SELECT count(*) FROM scala_sql_test1 WHERE tstamp=?", new Timestamp(refdate5)) must be equalTo(Some(3))
   }
+
   def setup() {
     //Create a pooled datasource for a test database
     ds = new BasicDataSource
