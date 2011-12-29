@@ -197,6 +197,62 @@ class Sql(val dataSource:DataSource) {
     rows
   }
 
+  /** Runs a parameterized query and calls a function with each row, passing the row as a Map.
+   * @param sql The query to run.
+   * @param limit The maximum number of rows to process (-1 to return ALL rows)
+   * @param offset The number of rows to skip before starting to process results
+   * @param params The parameters to pass to the query.
+   * @param body A function to be called for each row, taking a Map[String,Any] as parameter. The keys
+   * will be the column names, in lowercase.
+   */
+  def eachRow(limit:Int, offset:Int, sql:String, params:Any*)(body: Map[String,Any] => Unit) {
+    val conn = conns.get()
+    try {
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
+      if (limit > 0 && offset <= 0) stmt.setMaxRows(limit)
+      try {
+        val rs = stmt.executeQuery()
+        try {
+          val meta = rs.getMetaData
+          val range = 1 to meta.getColumnCount
+          //This is to determine if we can continue after skipping offset rows
+          val cont =
+            if (offset > 0) 1 to offset exists { x => !rs.next() }
+            else true
+          if (limit > 0) {
+            var count = 0
+            //Read up to limit rows
+            while (count < limit && rs.next()) {
+              val row = range.map { mapColumn(rs, meta, _) }.toMap
+              body(row)
+              count+=1
+            }
+          } else {
+            //Read everything; limit is either already set or ignored
+            while (cont && rs.next()) {
+              val row = range.map { mapColumn(rs, meta, _) }.toMap
+              body(row)
+            }
+          }
+        } finally rs.close()
+      } finally stmt.close()
+    } finally conn.close()
+  }
+
+  /** Runs the query and returns a List with no more than `limit` rows, and skipping `offset` rows before collecting the
+   * results.
+   * @param sql The parameterized query to run
+   * @param limit The maximum number of rows to return
+   * @param offset The number of rows to skip before starting to collect the resulting rows
+   * @param params The parameters for the query */
+  def rows(limit:Int, offset:Int, sql:String, params:Any*):List[Map[String, Any]]={
+    var rows:List[Map[String, Any]] = Nil
+    eachRow(limit, offset, sql, params:_*) { m =>
+      rows = rows:+m
+    }
+    rows
+  }
+
   /** Returns the first row, if any, for the specified query.
    * @param sql The query string.
    * @param params The parameters for the query.
