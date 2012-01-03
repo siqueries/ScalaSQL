@@ -143,8 +143,8 @@ class Sql(val dataSource:DataSource) {
     } finally conn.close()
   }
 
-  /** Executes a parameterized query and calls a function with each row, passing it the ResultSet (so the function
-   * does not need to call next).
+  /** Executes a parameterized query and calls a function with each row, passing it the ResultSet. The function
+   * does not need to call next().
    * @param sql The query to run.
    * @param params The parameters to pass to the query.
    * @param body The function to call for each row. It is passed the ResultSet but it doesn't need to call next() on it
@@ -158,6 +158,45 @@ class Sql(val dataSource:DataSource) {
         try {
           while (rs.next()) {
             body(rs)
+          }
+        } finally rs.close()
+      } finally stmt.close()
+    } finally conn.close()
+  }
+
+  /** Runs a parameterized query and calls a function with each row, passing it the ResultSet. The function
+   * does not need to call next().
+   * @param sql The query to run.
+   * @param limit The maximum number of rows to process (-1 to return ALL rows)
+   * @param offset The number of rows to skip before starting to process results
+   * @param params The parameters to pass to the query.
+   * @param body A function to be called for each row, taking the ResultSet as parameter. It doesn't need to call
+   * next() since it is called from within this method.
+   */
+  def eachRawRow(limit:Int, offset:Int, sql:String, params:Any*)(body: ResultSet => Unit) {
+    val conn = conns.get()
+    try {
+      val stmt = prepareStatement(conn.connection(), sql, params:_*)
+      if (limit > 0 && offset <= 0) stmt.setMaxRows(limit)
+      try {
+        val rs = stmt.executeQuery()
+        try {
+          //This is to determine if we can continue after skipping offset rows
+          val cont =
+            if (offset > 0) 1 to offset exists { x => !rs.next() }
+            else true
+          if (limit > 0) {
+            var count = 0
+            //Read up to limit rows
+            while (count < limit && rs.next()) {
+              body(rs)
+              count+=1
+            }
+          } else {
+            //Read everything; limit is either already set or ignored
+            while (cont && rs.next()) {
+              body(rs)
+            }
           }
         } finally rs.close()
       } finally stmt.close()
@@ -380,12 +419,12 @@ class Sql(val dataSource:DataSource) {
   /** Creates a connection, executes the function within an open transaction, and commits the transaction at the end,
    * or rolls back if an exception is thrown.
    * @param body The function to execute with the open transaction. It is passed the connection as an argument. */
-  def withTransaction(body: Connection => Unit) {
+  def withTransaction(body: ConnectionStatus => Unit) {
     val conn = conns.get()
     conn.beginTransaction()
     var ok = false
     try {
-      body(conn.connection())
+      body(conn)
       ok = true
     } finally {
       try {
@@ -401,7 +440,7 @@ class Sql(val dataSource:DataSource) {
    * @param rs An open ResultSet
    * @param meta The ResultSet's metadata
    * @param idx The column index (starting at 1). */
-  def mapColumn(rs:ResultSet, meta:ResultSetMetaData, idx:Int):(String, Any)={
+  private def mapColumn(rs:ResultSet, meta:ResultSetMetaData, idx:Int):(String, Any)={
     val v = rs.getObject(idx)
     (meta.getColumnName(idx).toLowerCase -> (if (rs.wasNull()) None else v))
   }
