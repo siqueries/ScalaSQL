@@ -62,3 +62,9 @@ object OutParams {
   val VARCHAR       = new OutParameter(Types.VARCHAR)
 
 }
+
+/** Bidirectional parameters, for statements.
+ *
+ * @author Enrique Zamudio
+ */
+class InOutParameter(override val sqlType:Int, val value:Any) extends OutParameter(sqlType:Int)
