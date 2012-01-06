@@ -38,7 +38,7 @@ class ConnectionStatus(val ds:DataSource) {
 
   /** Close the connection, unless there's a transaction in progress. */
   def close() {
-    if (!tx) {
+    if (!tx && conn != null) {
       conn.close()
     }
   }
