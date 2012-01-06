@@ -189,9 +189,10 @@ class Sql(val dataSource:DataSource) {
   }
 
   /** Executes the given SQL statement as a CallableStatement, with the specified parameters.
-   * Any OutParameter values are returned a Map, with the keys being the order in which the out parameter is found
-   * (starting with 1). If a return value is NULL, it gets mapped to None. */
-  def call(sql:String, params:Any*):Map[Int,Any]={
+   * Any OutParameter values are passed to the closure as a Map, with the keys being the order in which the
+   * out parameter is found (starting with 1). If a return value is NULL, it gets mapped to None.
+   * This is useful for out parameters that need to be retrieved while the statement is still open. */
+  def rawCall(sql:String, params:Any*)(body: Map[Int,Any] => Unit) {
     val conn = conns.get()
     try {
       val cstmt = conn.connection().prepareCall(sql)
@@ -200,7 +201,7 @@ class Sql(val dataSource:DataSource) {
         cstmt.execute()
         //Find the params that are out or in/out, map them to Tuple2's with
         //the index of the param and the return value, then convert to a map
-        params.filter(_.isInstanceOf[OutParameter]).map { p =>
+        val m = params.filter(_.isInstanceOf[OutParameter]).map { p =>
           val idx = params.indexOf(p) + 1
           val v = cstmt.getObject(idx) match {
             case x:java.math.BigDecimal => BigDecimal(x)
@@ -209,8 +210,18 @@ class Sql(val dataSource:DataSource) {
           }
           (idx, (if (cstmt.wasNull()) None else v))
         }.toMap
+        body(m)
       } finally cstmt.close()
     } finally conn.close()
+  }
+
+  /** Executes the given SQL statement as a CallableStatement, with the specified parameters.
+   * Any OutParameter values are returned a Map, with the keys being the order in which the out parameter is found
+   * (starting with 1). If a return value is NULL, it gets mapped to None. */
+  def call(sql:String, params:Any*):Map[Int,Any]={
+    var m:Map[Int,Any]=null
+    rawCall(sql, params:_*){m=_}
+    m
   }
 
   /** Executes a parameterized query and calls a function with each row, passing it the ResultSet. The function
