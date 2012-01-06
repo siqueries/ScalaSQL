@@ -42,13 +42,13 @@ class TestCalls extends SpecificationWithJUnit { def is =
   }
 
   def simpleCall()={
-    sql.callUpdate("{call function1()}") must be equalTo(0)
+    sql.callUpdate("{call test_function1()}") must be equalTo(0)
   }
   def callOutNoParams()={
-    sql.call("{?=call function1()}", OutParams.VARCHAR) must be equalTo(Map(1->"This is function1"))
+    sql.call("{?=call test_function1()}", OutParams.VARCHAR) must be equalTo(Map(1->"This is function1"))
   }
   def callOutParams()={
-    sql.call("{?=call function2(?, ?)}", OutParams.DECIMAL, "String", BigDecimal(1.1)) must be equalTo(Map(1->BigDecimal(2.1)))
+    sql.call("{?=call test_function2(?, ?)}", OutParams.DECIMAL, "String", BigDecimal(1.1)) must be equalTo(Map(1->BigDecimal(2.1)))
   }
 
 }
