@@ -83,10 +83,10 @@ class Sql(val dataSource:DataSource) {
         case x:scala.Array[Byte] => call.setBytes(count, x)
         case x:Reader            => call.setClob(count, x)
         case x:InputStream       => call.setBlob(count, x)
-        case x:OutParameter      => call.registerOutParameter(count, x.sqlType)
         case x:InOutParameter    =>
           call.setObject(count, x.value, x.sqlType)
           call.registerOutParameter(count, x.sqlType)
+        case x:OutParameter      => call.registerOutParameter(count, x.sqlType)
         case x                   => call.setObject(count, x)
       }
       count+=1
@@ -190,7 +190,7 @@ class Sql(val dataSource:DataSource) {
 
   /** Executes the given SQL statement as a CallableStatement, with the specified parameters.
    * Any OutParameter values are returned a Map, with the keys being the order in which the out parameter is found
-   * (starting with 1). */
+   * (starting with 1). If a return value is NULL, it gets mapped to None. */
   def call(sql:String, params:Any*):Map[Int,Any]={
     val conn = conns.get()
     try {
@@ -200,9 +200,14 @@ class Sql(val dataSource:DataSource) {
         cstmt.execute()
         //Find the params that are out or in/out, map them to Tuple2's with
         //the index of the param and the return value, then convert to a map
-        params.filter(_.isInstanceOf[OutParameter]).map { v =>
-          val idx = params.indexOf(v) + 1
-          (idx, cstmt.getObject(idx))
+        params.filter(_.isInstanceOf[OutParameter]).map { p =>
+          val idx = params.indexOf(p) + 1
+          val v = cstmt.getObject(idx) match {
+            case x:java.math.BigDecimal => BigDecimal(x)
+            case x:java.math.BigInteger => BigInt(x.toByteArray)
+            case x => x
+          }
+          (idx, (if (cstmt.wasNull()) None else v))
         }.toMap
       } finally cstmt.close()
     } finally conn.close()
@@ -506,7 +511,11 @@ class Sql(val dataSource:DataSource) {
    * @param meta The ResultSet's metadata
    * @param idx The column index (starting at 1). */
   private def mapColumn(rs:ResultSet, meta:ResultSetMetaData, idx:Int):(String, Any)={
-    val v = rs.getObject(idx)
+    val v = rs.getObject(idx) match {
+      case x:java.math.BigDecimal => BigDecimal(x)
+      case x:java.math.BigInteger => BigInt(x.toByteArray)
+      case x => x
+    }
     (meta.getColumnName(idx).toLowerCase -> (if (rs.wasNull()) None else v))
   }
 
