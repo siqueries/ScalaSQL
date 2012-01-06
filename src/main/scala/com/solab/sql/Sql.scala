@@ -39,26 +39,59 @@ class Sql(val dataSource:DataSource) {
     var count=1
     params.foreach { p =>
       p match {
-        case x:Int => stmt.setInt(count, x)
-        case x:Long => stmt.setLong(count, x)
-        case x:Short => stmt.setShort(count, x)
-        case x:Byte => stmt.setByte(count, x)
-        case x:Boolean => stmt.setBoolean(count, x)
-        case x:BigDecimal => stmt.setBigDecimal(count, x.bigDecimal)
-        case x:String => stmt.setString(count, x)
-        case x:Timestamp => stmt.setTimestamp(count, x)
-        case x:java.sql.Date => stmt.setDate(count, x)
-        case x:java.util.Date => stmt.setDate(count, new java.sql.Date(x.getTime))
-        case x:Double => stmt.setDouble(count, x)
-        case x:Float => stmt.setFloat(count, x)
+        case x:Int               => stmt.setInt(count, x)
+        case x:Long              => stmt.setLong(count, x)
+        case x:Short             => stmt.setShort(count, x)
+        case x:Byte              => stmt.setByte(count, x)
+        case x:Boolean           => stmt.setBoolean(count, x)
+        case x:BigDecimal        => stmt.setBigDecimal(count, x.bigDecimal)
+        case x:String            => stmt.setString(count, x)
+        case x:Timestamp         => stmt.setTimestamp(count, x)
+        case x:java.sql.Date     => stmt.setDate(count, x)
+        case x:java.util.Date    => stmt.setDate(count, new java.sql.Date(x.getTime))
+        case x:Double            => stmt.setDouble(count, x)
+        case x:Float             => stmt.setFloat(count, x)
+        case x:DbNull            => stmt.setNull(count, x.sqlType)
         case x:scala.Array[Byte] => stmt.setBytes(count, x)
-        case x:Reader => stmt.setClob(count, x)
-        case x:InputStream => stmt.setBlob(count, x)
-        case x => stmt.setObject(count, x)
+        case x:Reader            => stmt.setClob(count, x)
+        case x:InputStream       => stmt.setBlob(count, x)
+        case x                   => stmt.setObject(count, x)
       }
       count+=1
     }
     stmt
+  }
+
+  /** Prepares a CallableStatement, registering any OutParameters passed as arguments. */
+  def prepareCall(call:CallableStatement, params:Any*):CallableStatement={
+    var count = 1
+    params.foreach { p =>
+      p match {
+        case x:Int               => call.setInt(count, x)
+        case x:Long              => call.setLong(count, x)
+        case x:Short             => call.setShort(count, x)
+        case x:Byte              => call.setByte(count, x)
+        case x:Boolean           => call.setBoolean(count, x)
+        case x:BigDecimal        => call.setBigDecimal(count, x.bigDecimal)
+        case x:String            => call.setString(count, x)
+        case x:Timestamp         => call.setTimestamp(count, x)
+        case x:java.sql.Date     => call.setDate(count, x)
+        case x:java.util.Date    => call.setDate(count, new java.sql.Date(x.getTime))
+        case x:Double            => call.setDouble(count, x)
+        case x:Float             => call.setFloat(count, x)
+        case x:DbNull            => call.setNull(count, x.sqlType)
+        case x:scala.Array[Byte] => call.setBytes(count, x)
+        case x:Reader            => call.setClob(count, x)
+        case x:InputStream       => call.setBlob(count, x)
+        case x:OutParameter      => call.registerOutParameter(count, x.sqlType)
+        case x:InOutParameter    =>
+          call.setObject(count, x.value, x.sqlType)
+          call.registerOutParameter(count, x.sqlType)
+        case x                   => call.setObject(count, x)
+      }
+      count+=1
+    }
+    call
   }
 
   /** Creates a PreparedStatement for the specified connection, with the specified SQL and parameters.
@@ -140,6 +173,38 @@ class Sql(val dataSource:DataSource) {
           }
         } finally rs.close()
       } finally stmt.close()
+    } finally conn.close()
+  }
+
+  /** Executes the given SQL statement as a CallableStatement, with the specified parameters. */
+  def callUpdate(sql:String, params:Any*):Int={
+    val conn = conns.get()
+    try {
+      val cstmt = conn.connection().prepareCall(sql)
+      try {
+        prepareCall(cstmt, params:_*)
+        cstmt.executeUpdate()
+      } finally cstmt.close()
+    } finally conn.close()
+  }
+
+  /** Executes the given SQL statement as a CallableStatement, with the specified parameters.
+   * Any OutParameter values are returned a Map, with the keys being the order in which the out parameter is found
+   * (starting with 1). */
+  def call(sql:String, params:Any*):Map[Int,Any]={
+    val conn = conns.get()
+    try {
+      val cstmt = conn.connection().prepareCall(sql)
+      try {
+        prepareCall(cstmt, params:_*)
+        cstmt.execute()
+        //Find the params that are out or in/out, map them to Tuple2's with
+        //the index of the param and the return value, then convert to a map
+        params.filter(_.isInstanceOf[OutParameter]).map { v =>
+          val idx = params.indexOf(v) + 1
+          (idx, cstmt.getObject(idx))
+        }.toMap
+      } finally cstmt.close()
     } finally conn.close()
   }
 
