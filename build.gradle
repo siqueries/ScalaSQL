@@ -3,11 +3,10 @@ apply plugin:'maven'
 apply plugin:'signing'
 description='A simple JDBC interface for Scala'
 group='com.solab.scalasql'
-version='0.8'
+version='0.9'
 defaultTasks 'build'
 
 repositories {
-	mavenLocal()
 	mavenCentral()
 	mavenRepo url:'http://scala-tools.org/repo-releases'
 }
