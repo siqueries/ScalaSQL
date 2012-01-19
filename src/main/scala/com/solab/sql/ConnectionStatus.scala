@@ -27,18 +27,21 @@ class ConnectionStatus(val ds:DataSource) {
 
   private var tx=false
   private var conn:Connection=_
+  private var use=0
 
   /** Return the current connection, or create a new one if it doesn't exist. */
   def connection()={
     if (conn == null || conn.isClosed) {
       conn = ds.getConnection
     }
+    use += 1
     conn
   }
 
   /** Close the connection, unless there's a transaction in progress. */
   def close() {
-    if (!tx && conn != null) {
+    use -= 1
+    if (!tx && conn != null && use == 0) {
       conn.close()
     }
   }
