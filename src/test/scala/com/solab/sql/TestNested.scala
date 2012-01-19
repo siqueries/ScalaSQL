@@ -94,7 +94,7 @@ class TestNested extends SpecificationWithJUnit { def is =
     //Now test nested update
     var count = 0
     sql.eachRow("SELECT * FROM nqmaster WHERE name LIKE ?", "master_t3_%") { master =>
-      count += sql.update("UPDATE nqdetail SET sub=? WHERE master=?", "updated_sub_t3", master("id"))
+      count += sql.executeUpdate("UPDATE nqdetail SET sub=? WHERE master=?", "updated_sub_t3", master("id"))
     }
     count must be equalTo 50
   }
@@ -109,7 +109,7 @@ class TestNested extends SpecificationWithJUnit { def is =
     //Now test nested update
     var count = 0
     sql.eachRow("SELECT * FROM nqmaster WHERE name LIKE ?", "master_t4_%") { master =>
-      count += sql.update("DELETE FROM nqdetail WHERE master=?", master("id"))
+      count += sql.executeUpdate("DELETE FROM nqdetail WHERE master=?", master("id"))
     }
     count must be equalTo 50
   }
