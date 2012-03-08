@@ -192,7 +192,7 @@ class Sql(val dataSource:DataSource) {
    * Any OutParameter values are passed to the closure as a Map, with the keys being the order in which the
    * out parameter is found (starting with 1). If a return value is NULL, it gets mapped to None.
    * This is useful for out parameters that need to be retrieved while the statement is still open. */
-  def rawCall(sql:String, params:Any*)(body: Map[Int,Any] => Unit) {
+  def rawCall[A](sql:String, params:Any*)(body: Map[Int,Any] => A) {
     val conn = conns.get()
     try {
       val cstmt = conn.connection().prepareCall(sql)
@@ -230,7 +230,7 @@ class Sql(val dataSource:DataSource) {
    * @param params The parameters to pass to the query.
    * @param body The function to call for each row. It is passed the ResultSet but it doesn't need to call next() on it
    * since this is done inside this method. */
-  def eachRawRow(sql:String, params:Any*)(body: ResultSet => Unit) {
+  def eachRawRow[A](sql:String, params:Any*)(body: ResultSet => A) {
     val conn = conns.get()
     try {
       val stmt = prepareStatement(conn.connection(), sql, params:_*)
@@ -254,7 +254,7 @@ class Sql(val dataSource:DataSource) {
    * @param body A function to be called for each row, taking the ResultSet as parameter. It doesn't need to call
    * next() since it is called from within this method.
    */
-  def eachRawRow(limit:Int, offset:Int, sql:String, params:Any*)(body: ResultSet => Unit) {
+  def eachRawRow[A](limit:Int, offset:Int, sql:String, params:Any*)(body: ResultSet => A) {
     val conn = conns.get()
     try {
       val stmt = prepareStatement(conn.connection(), sql, params:_*)
@@ -290,7 +290,7 @@ class Sql(val dataSource:DataSource) {
    * @param body A function to be called for each row, taking a Map[String,Any] as parameter. The keys
    * will be the column names, in lowercase.
    */
-  def eachRow(sql:String, params:Any*)(body: Map[String,Any] => Unit) {
+  def eachRow[A](sql:String, params:Any*)(body: Map[String,Any] => A) {
     val conn = conns.get()
     try {
       val stmt = prepareStatement(conn.connection(), sql, params:_*)
@@ -325,7 +325,7 @@ class Sql(val dataSource:DataSource) {
    * @param body A function to be called for each row, taking a Map[String,Any] as parameter. The keys
    * will be the column names, in lowercase.
    */
-  def eachRow(limit:Int, offset:Int, sql:String, params:Any*)(body: Map[String,Any] => Unit) {
+  def eachRow[A](limit:Int, offset:Int, sql:String, params:Any*)(body: Map[String,Any] => A) {
     val conn = conns.get()
     try {
       val stmt = prepareStatement(conn.connection(), sql, params:_*)
@@ -500,7 +500,7 @@ class Sql(val dataSource:DataSource) {
   /** Creates a connection, executes the function within an open transaction, and commits the transaction at the end,
    * or rolls back if an exception is thrown.
    * @param body The function to execute with the open transaction. It is passed the connection as an argument. */
-  def withTransaction(body: ConnectionStatus => Unit) {
+  def withTransaction[A](body: ConnectionStatus => A) {
     val conn = conns.get()
     conn.beginTransaction()
     var ok = false
